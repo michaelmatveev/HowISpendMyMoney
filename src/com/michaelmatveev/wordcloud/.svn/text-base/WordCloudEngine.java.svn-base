@@ -1,0 +1,240 @@
+package com.michaelmatveev.wordcloud;;
+
+import com.michaelmatveev.wordcloud;.AVector;
+
+import java.util.ArrayList;
+
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Typeface;
+import android.graphics.RectF;
+
+class WordCloudEngine {
+
+	private WordFonter fonter;
+	private WordSizer sizer;
+	private WordColorer colorer;
+	private WordAngler angler;
+	private WordPlacer placer;
+	private WordNudger nudger;
+	private WordShaper wordShaper;
+	
+	private Word[] words;
+	private EngineWord[] eWords;
+	private int eWordIndex = -1;
+	
+	boolean wasDrawnGrid = false;
+	
+	private RenderOptions renderOptions;
+	
+	WordCloudEngine(Word[] words, WordFonter fonter, WordSizer sizer, WordColorer colorer, WordAngler angler, WordShaper shaper, WordPlacer placer, WordNudger nudger, RenderOptions renderOptions) {		
+
+		this.renderOptions = renderOptions;
+		
+		this.fonter = fonter;
+		this.sizer = sizer;
+		this.colorer = colorer;
+		this.angler = angler;
+		this.placer = placer;
+		this.nudger = nudger;		
+		this.wordShaper = shaper;
+		
+		this.eWords = wordsIntoEngineWords(words);
+	}
+	
+	private EngineWord[] wordsIntoEngineWords(Word[] words) {
+		ArrayList<EngineWord> engineWords = new ArrayList<EngineWord>();
+		
+		int maxNumberOfWords = renderOptions.maxNumberOfWordsToDraw >= 0 ?
+								renderOptions.maxNumberOfWordsToDraw :
+								words.length;
+		
+		for (int i = 0; i < words.length; i++) {
+			
+			Word word = words[i];
+			EngineWord eWord = new EngineWord(word, i, words.length);
+			
+			Typeface wordFont = word.getFont(fonter);
+			float wordSize = word.getSize(sizer, i, words.length);
+			float wordAngle = word.getAngle(angler);
+			
+			eWord.word.setAngle(wordAngle);
+			
+			Path path = wordShaper.getPathFor(eWord, wordFont, wordSize, wordAngle, renderOptions.minPathSize);
+			
+			if (path == null) {
+				skipWord(word, WordCloud.SHAPE_WAS_TOO_SMALL);
+			}
+			else {
+				eWord.setPath(path);
+				engineWords.add(eWord);
+			}
+		}
+		
+		for (int i = maxNumberOfWords; i < words.length; i++) {
+			skipWord(words[i], WordCloud.WAS_OVER_MAX_NUMBER_OF_WORDS);
+		}
+		
+		return engineWords.toArray(new EngineWord[0]);
+	}
+	
+	private void skipWord(Word word, int reason) {
+		word.wasSkippedBecause(reason);
+	}
+	
+	boolean hasMore() {
+		return eWordIndex < eWords.length-1;
+	}
+	
+	void drawAll(Canvas canvas, int statusBarHeight) {
+		while(hasMore()) {
+			drawNext(canvas, statusBarHeight);
+		}
+	}
+	
+	void drawNext(Canvas canvas, int statusBarHeight) {
+		if (!hasMore()) return;
+		
+//		if (!wasDrawnGrid) {
+//			drawGrid(canvas);
+//			wasDrawnGrid = true;
+//		}
+		
+		EngineWord eWord = eWords[++eWordIndex];		
+		boolean wasPlaced = placeWord(eWord, canvas, statusBarHeight);
+					
+		if (wasPlaced) {
+			drawWordOnCanvas(eWord, canvas);
+		}
+	}	
+	
+	private boolean placeWord(EngineWord eWord, Canvas canvas, int statusBarHeight) {
+		Word word = eWord.word;
+		RectF rect = new RectF();
+		eWord.getPath().computeBounds(rect, true);		
+		int wordImageWidth = (int)rect.width();
+		int wordImageHeight = (int)rect.height();
+		int underZero = (int)(rect.height() + rect.top);
+		
+		eWord.setDesiredLocation(placer, eWords.length, wordImageWidth, wordImageHeight, canvas.getWidth(), canvas.getHeight());
+		
+		// Set maximum number of placement trials
+		int maxAttemptsToPlace = renderOptions.maxAttemptsToPlaceWord > 0 ?
+									renderOptions.maxAttemptsToPlaceWord :
+									calculateMaxAttemptsFromWordWeight(word);
+		
+		EngineWord lastCollidedWith = null;
+		for (int attempt = 0; attempt < maxAttemptsToPlace; attempt++) {
+			
+			eWord.nudge(nudger.nudgeFor(word, attempt));
+			
+			AVector loc = eWord.getCurrentLocation();
+			if (loc.x < 0 || loc.y < wordImageHeight || loc.x + wordImageWidth >= canvas.getWidth() || (loc.y + underZero) >= (canvas.getHeight()-statusBarHeight)) {
+				//OUT OF BOUNDS
+				continue;
+			}
+			
+			if (lastCollidedWith != null && eWord.intersects(lastCollidedWith)) {
+				//CACHE COLLISION
+				continue;
+			}
+						
+			boolean foundOverlap = false;
+			for (int i = 0; !foundOverlap && i < eWordIndex; i++) {
+				EngineWord otherWord = eWords[i];
+				if (eWord.intersects(otherWord)) {
+					foundOverlap = true;
+					lastCollidedWith = otherWord;
+				}
+			}
+			
+			if (!foundOverlap) {
+				eWord.finalizeLocation();
+				return true;
+			}
+		}
+		
+		skipWord(eWord.word, WordCloud.NO_SPACE);
+		return false;
+	}
+
+	private int calculateMaxAttemptsFromWordWeight(Word word) {
+		return (int)((1.0 - word.weight) * 6000) + 200;
+	}
+	
+	private void drawWordOnCanvas(EngineWord word, Canvas canvas) {
+		
+		canvas.save();
+		
+		Paint paint = new Paint();
+		paint.setStyle(Paint.Style.FILL);
+		paint.setAntiAlias(true);		
+		paint.setColor(word.word.getColor(colorer));		
+				
+		Path path = word.getPath();	
+		
+		canvas.translate(word.word.getRenderedPlace().x, word.word.getRenderedPlace().y);
+		
+		canvas.drawPath(path, paint);		
+		canvas.restore();
+	}
+	
+//	Word getWordAt(float x, float y) {
+//		for (int i = 0; i < eWords.length; i++) {
+//			if (eWords[i].wasPlaced()) {
+//				Shape shape = eWords[i].getShape();
+//				if (shape.contains(x, y)) {
+//					return eWords[i].word;
+//				}
+//			}
+//		}
+//		return null;
+//	}
+
+	Word[] getSkippedWords() {
+		ArrayList<Word> skippedWords = new ArrayList<Word>();
+		for (int i = 0; i < words.length; i++) {
+			if (words[i].wasSkipped()) {
+				skippedWords.add(words[i]);
+			}
+		}
+		return skippedWords.toArray(new Word[0]);
+	}
+	
+	float getProgress() {
+		return (float)this.eWordIndex / this.eWords.length;
+	}
+	
+	void drawGrid(Canvas canvas) {
+		
+		int widthCanvas = canvas.getWidth();
+		int centerXCanvas = canvas.getWidth()/2;
+		int heightCanvas = canvas.getHeight();
+		int centerYCanvas = canvas.getHeight()/2;
+		int densityCanvas = canvas.getDensity();
+		
+		Paint paint = new Paint();
+		paint.setStyle(Paint.Style.FILL);
+		paint.setColor(Color.LTGRAY);
+		paint.setAntiAlias(true);		
+		paint.setTextSize(6);
+		
+		for (int i = 0; i < widthCanvas; i+=10) {
+			canvas.drawLine(i, 0, i, heightCanvas, paint);
+			String str = i + "";
+			if ((i % 50) == 0) canvas.drawText(str, i, 10, paint);
+		}
+		
+		for (int i = 0; i < heightCanvas; i+=10) {
+			canvas.drawLine(0, i, widthCanvas, i, paint);
+			String str = i + "";
+			if ((i % 50) == 0) canvas.drawText(str, 0, i, paint);
+		}
+		
+		paint.setColor(Color.CYAN);
+		canvas.drawLine(centerXCanvas, 0, centerXCanvas, heightCanvas, paint);
+		canvas.drawLine(0, centerYCanvas, widthCanvas, centerYCanvas, paint);
+	}
+}

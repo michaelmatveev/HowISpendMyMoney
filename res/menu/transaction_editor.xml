@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+    
+    <item android:id="@+id/action_cancel"
+          android:title="@string/cancel"
+          android:icon="@drawable/ic_action_cancel"
+          app:showAsAction="ifRoom|collapseActionView">
+    </item>
+ 
+   	<item
+         android:id="@+id/action_save"
+         android:layout_height="wrap_content"
+         android:layout_width="wrap_content"
+         android:title="@string/save"
+         app:showAsAction="ifRoom|collapseActionView"
+         android:icon="@drawable/ic_action_save">
+    </item>
+</menu>

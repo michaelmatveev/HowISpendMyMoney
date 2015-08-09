@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" >
+    <PreferenceScreen
+        android:title="Database options" >
+        <Preference
+            android:title="Export database"
+            android:summary="Save database to SD card"
+            android:key="Export" />
+        <Preference 
+            android:title="Import database"
+            android:summary="Import database from SD card"
+            android:key="Import" />
+    </PreferenceScreen>
+</PreferenceScreen>

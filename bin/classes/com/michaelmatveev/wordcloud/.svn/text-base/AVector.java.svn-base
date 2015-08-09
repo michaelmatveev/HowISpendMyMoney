@@ -1,0 +1,97 @@
+package com.michaelmatveev.wordcloud;;
+
+import android.graphics.PointF;
+
+public class AVector extends PointF implements Constants{
+		
+	/**
+	 * Constructor for a 2D vector.
+	 *
+	 * @param  x the x coordinate.
+	 * @param  y the y coordinate.
+	 */
+	public AVector(float x, float y) {
+		this.x = x;
+		this.y = y;
+	}
+
+	/**
+	 * Add a vector to this vector
+	 * @param v the vector to be added
+	 */
+	public void add(AVector v) {
+		x += v.x;
+		y += v.y;
+	}
+
+	public void add(float x, float y) {
+		this.x += x;
+		this.y += y;
+	}
+
+	/**
+	 * Add two vectors
+	 * @param v1 a vector
+	 * @param v2 another vector
+	 * @return a new vector that is the sum of v1 and v2
+	 */
+	static public AVector add(AVector v1, AVector v2) {
+		v1.add(v2);
+		return v1;
+	}
+	
+	/**
+	 * Get a copy of this vector.
+	 */
+	public AVector get() {
+		return new AVector(x, y);
+	}
+	
+	/**
+	 * Set x, y, and z coordinates from a Vector3D object.
+	 *
+	 * @param v the PVector object to be copied
+	 */
+	public void set(AVector v) {
+		x = v.x;
+		y = v.y;
+	}
+	
+	
+	/**
+	 * Calculate the angle of rotation for this vector (only 2D vectors)
+	 * @return the angle of rotation
+	 */
+	public float heading2D() {
+		float angle = (float) Math.atan2(-y, x);
+		return -1*angle;
+	}
+
+
+
+
+	/**
+	 * Calculate the angle between two vectors, using the dot product
+	 * @param v1 a vector
+	 * @param v2 another vector
+	 * @return the angle between the vectors
+	 */
+	static public float angleBetween(AVector v1, AVector v2) {
+		double dot = v1.x * v2.x + v1.y * v2.y;
+		double v1mag = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+		double v2mag = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+		// This should be a number between -1 and 1, since it's "normalized"
+		double amt = dot / (v1mag * v2mag);
+		// But if it's not due to rounding error, then we need to fix it
+		// http://code.google.com/p/processing/issues/detail?id=340
+		// Otherwise if outside the range, acos() will return NaN
+		// http://www.cppreference.com/wiki/c/math/acos
+		if (amt <= -1) {
+			return PI;
+		} else if (amt >= 1) {
+			// http://code.google.com/p/processing/issues/detail?id=435
+			return 0;
+		}
+		return (float) Math.acos(amt);
+	}
+}
